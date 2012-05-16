@@ -1,4 +1,7 @@
-
+import os
+import sys
+import re
+import commands
 import e_afni
 import nipype.pipeline.engine as pe
 import nipype.interfaces.utility as util
@@ -9,6 +12,249 @@ def reho_statistic_filter(lfo, tied):
     import numpy as np
 
     V = np.pad(lfo, ((1, 1), (1, 1), (1, 1), (0, 0)), 'edge')
+
+
+def get_vectors(strat):
+
+    paths = []
+    def dfs(val_list, path):
+
+        if val_list == []:
+            paths.append(list(path.split(',')[1:]))
+
+        else:
+            vals = val_list.pop()
+            for val in vals:
+                dfs(list(val_list), path + ',' + val)
+
+
+
+
+    key_list = []
+    val_list = []
+    for k, v in sorted(strat.items()):
+        key_list.append(k)
+        val_list.append(v)
+
+    dfs(val_list, '')
+
+    return paths
+
+
+def get_strategies(K, iterables):
+
+    p_s_m = {}
+    sm = {}
+    strat = {}
+    for key in K:
+
+        vals = key.split('/')
+
+        vals.remove('')
+        for val in vals:
+
+            if not val in p_s_m:
+                p_s_m[val] = 1
+
+    k = sorted(p_s_m.keys())
+    for val in k:
+
+        match = 0
+        for variable in iterables:
+
+            if variable in val and val.split(variable)[0] == '':
+
+                match = 1
+
+                it = val.split(variable)[1]
+                if variable in strat:
+                    item = strat[variable]
+                    item.append(val)
+                else:
+                    strat[variable] = [val]
+
+        if match == 0:
+            strat[val] = [val]
+
+
+    strat_vect = get_vectors(strat)
+    return strat_vect
+
+
+def get_match(sink_dir, p, strategies):
+
+    p1 = p.split(sink_dir)
+    p1 = p1[1]
+    p_vals = p1.split('/')
+    p_vals = p_vals[3:]
+
+    flag = 0
+    strats = []
+    for strat in strategies:
+        flag = 0
+        for val in p_vals:
+
+            if not val in strat:
+                flag = 1
+                break
+        if flag == 0:
+            strats.append(str(strat))
+
+    if strats == []:
+        print "WARNING : No strategy found for ", p
+        return None
+
+    return strats
+
+def smash(sink_dir, maps, strategies):
+
+    new_maps = {}
+
+    for p in sorted(maps.keys()):
+
+        strats = get_match(sink_dir, p, strategies)
+
+
+        for strat in strats:
+            if strat in new_maps:
+                list1 = list(new_maps[strat])
+                new_maps[strat] = sorted(list(set(maps[p] + list1)))
+            else:
+                new_maps[strat] = sorted(list(maps[p]))
+
+    return dict(new_maps)
+
+
+def make_links(new_maps, sink_dir, sub):
+
+    print 'creating symbolink links for %s ...' % (sub)
+    sym_path = os.path.join(sink_dir, 'sym_links')
+    cmd = 'mkdir -p %s' % (sym_path)
+    commands.getoutput(cmd)
+
+    idx = 0
+    f = open('%s/label_linkage.txt' % (sym_path), 'w')
+
+    labels = {}
+    strats = sorted(new_maps.keys())
+    orig_sub_dir = os.path.join(sink_dir, sub)
+    wfs = sorted(os.listdir(orig_sub_dir))
+    sessions = os.listdir(os.path.join(orig_sub_dir, wfs[1]))
+
+    for strat in strats:
+        idx += 1
+        print >>f, 'label_'+str(idx), ' ', strat
+        labels[strat] = 'label_'+str(idx)
+        l_path = os.path.join(sym_path, 'label_'+str(idx))
+
+        cmd = 'mkdir -p %s' % (l_path)
+        commands.getoutput(cmd)
+
+        sub_path = os.path.join(l_path, sub)
+        cmd = 'mkdir -p %s' % (sub_path)
+        commands.getoutput(cmd)
+
+
+        for wf in wfs:
+            wf_path = os.path.join(sub_path, wf)
+            cmd = 'mkdir -p %s' % (wf_path)
+            commands.getoutput(cmd)
+
+            for file in new_maps[strat]:
+
+                if '/' + wf + '/' in file:
+                    cmd = 'ln -s %s %s' %(file, os.path.join(wf_path, os.path.basename(file)))
+                    commands.getoutput(cmd)
+
+    f.close()
+
+
+def make_sym_links(sink_dir, strategies, subj_list):
+
+
+    for subject in subj_list:
+        maps = {}
+
+        dfs_string = commands.getoutput("find %s/ -type f | perl -lne 'print tr:/::, \" $_\"' | sort -n | cut -d' ' -f2" % (os.path.join(sink_dir, subject)))
+
+        dfs_files = dfs_string.split('\n')
+
+        for file in dfs_files:
+            pdir = os.path.dirname(file)
+
+            val = None
+            if pdir in maps:
+                val = maps[pdir]
+                val.append(file)
+            else:
+                val = [file]
+            maps[os.path.dirname(file)] = val
+
+        new_maps = smash(sink_dir, maps, strategies)
+
+        make_links(new_maps, sink_dir, subject)
+
+def symlink_creator(sink_dir, subj_list):
+
+
+    subjectDir = os.path.join(sink_dir, subj_list[0])
+
+    iterables = ['threshold', 'csf_threshold', 'fwhm', 'gm_threshold', 'hp', 'lp', 'nc', 'run_scrubbing', 'seeds', 'selector', 'session_id', 'target_angle', 'wm_threshold']
+    wfs = os.listdir(subjectDir)
+
+    labels = {}
+    label_id = 0
+
+    dfs_string = commands.getoutput("find %s/ -type f | perl -lne 'print tr:/::, \" $_\"' | sort -n | cut -d' ' -f2" % (subjectDir))
+
+    dfs_files = dfs_string.split('\n')
+
+    maps = {}
+
+    m1 = {}
+    for file in dfs_files:
+        f = str(file)
+        spath = os.path.join(sink_dir, subj_list[0])
+        vmhc_path = os.path.join(spath, 'vmhc')
+        alff_path = os.path.join(spath, 'alff')
+        nuisance_path = os.path.join(spath, 'nuisance')
+        sca_path = os.path.join(spath, 'sca')
+        scrubbing_path = os.path.join(spath, 'scrubbing')
+        anat_path = os.path.join(spath, 'anat')
+        func_path = os.path.join(spath, 'func')
+        seg_path = os.path.join(spath, 'segment')
+        reg_path = os.path.join(spath, 'reg')
+
+        file = re.sub(r'%s' % (vmhc_path), '', file)
+        file = re.sub(r'%s' % (alff_path), '', file)
+        file = re.sub(r'%s' % (nuisance_path), '', file)
+        file = re.sub(r'%s' % (sca_path), '', file)
+        file = re.sub(r'%s' % (scrubbing_path), '', file)
+        file = re.sub(r'%s' % (anat_path), '', file)
+        file = re.sub(r'%s' % (func_path), '', file)
+        file = re.sub(r'%s' % (reg_path), '', file)
+        file = re.sub(r'%s' % (seg_path), '', file)
+        #print file
+        pdir = os.path.dirname(file)
+
+        val = None
+        v = None
+        if pdir in maps:
+            val = maps[pdir]
+            v = m1[pdir]
+            val.append(file)
+            v.append(f)
+        else:
+            val = [file]
+            v = [f]
+        maps[os.path.dirname(file)] = val
+        m1[os.path.dirname(file)] = v
+
+    strategies = list(get_strategies(maps.keys(), iterables))
+
+
+    make_sym_links(sink_dir, strategies, subj_list)
+
 
 def getIndx(in_file):
 
@@ -174,8 +420,8 @@ def setMeanFD(infile_a, infile_b):
     print "outval ---> ", out_val
     print "error_val -->", error_val
 
-    data= loadtxt(infile_b)
-    mean  = np.mean(data)
+    data = loadtxt(infile_b)
+    mean = np.mean(data)
     print "mean ->", mean
 
     f = open(out_file, 'a')
@@ -197,16 +443,16 @@ def setNumFD(infile_a, infile_b, threshold):
     out_val, error_val = copycmd.communicate()
     print "outval ---> ", out_val
     print "error_val -->", error_val
-    
-    data= loadtxt(infile_b)
-    count = float(data[data >=threshold].size)
+
+    data = loadtxt(infile_b)
+    count = float(data[data >= threshold].size)
     print "count ->", count
 
     f = open(out_file, 'a')
     f.write('%.4f,' % count)
 
     f.close()
-    
+
     return out_file
 
 
@@ -222,12 +468,12 @@ def setPercentFD(infile_a, infile_b, threshold):
     out_val, error_val = copycmd.communicate()
     print "outval ---> ", out_val
     print "error_val -->", error_val
-    
-    data= loadtxt(infile_b)
-    count = np.float(data[data>threshold].size)
+
+    data = loadtxt(infile_b)
+    count = np.float(data[data > threshold].size)
     sum = (count*100/(len(data)+1))
     print "sum ->", sum
-    
+
     f = open(out_file, 'a')
     f.write('%.4f,' %sum)
 
@@ -236,7 +482,7 @@ def setPercentFD(infile_a, infile_b, threshold):
     return out_file
 
 
-def setFramesEx(in_file,threshold):
+def setFramesEx(in_file, threshold):
 
     import subprocess as sb
     import os
@@ -244,30 +490,30 @@ def setFramesEx(in_file,threshold):
     from numpy import loadtxt
 
     out_file = os.path.join(os.getcwd(), 'frames_ex.1D')
-    data= loadtxt(in_file) 
+    data = loadtxt(in_file)
     #masking zeroth timepoint value as 0, since the mean displacment value for
     #zeroth timepoint cannot be calculated, as there is no timepoint before it
-    data[0]=0
-    
-    extra_indices=[]
-    
-    indices=[i[0] for i in (np.argwhere(data>= threshold)).tolist()]  
-    
+    data[0] = 0
+
+    extra_indices = []
+
+    indices = [i[0] for i in (np.argwhere(data >= threshold)).tolist()]
+
     #adding addtional 2 after and one before timepoints
-    for i  in indices:
-    
-     if i>0:
+    for i in indices:
+
+     if i > 0:
         extra_indices.append(i-1)
-        if i+1 < data.size:     
+        if i+1 < data.size:
             extra_indices.append(i+1)
         if i+2 < data.size:
             extra_indices.append(i+2)
-    
-    indices =list(set(indices) |  set(extra_indices))
-    
-    
+
+    indices = list(set(indices) | set(extra_indices))
+
+
     f = open(out_file, 'a')
-    
+
     print "indices->", indices
     for idx in indices:
         f.write('%s,' % int(idx))
@@ -282,17 +528,17 @@ def setFramesIN(in_file, threshold, exclude_list):
     import os
     import numpy as np
     from numpy import loadtxt
-    
+
     out_file = os.path.join(os.getcwd(), 'frames_in.1D')
 
-    data= loadtxt(in_file)
+    data = loadtxt(in_file)
     #masking zeroth timepoint value as 0, since the mean displacment value for
     #zeroth timepoint cannot be calculated, as there is no timepoint before it
-    data[0]=0
-    
-    indices=[i[0] for i in (np.argwhere(data< threshold)).tolist()]
-    
-    indx=[]
+    data[0] = 0
+
+    indices = [i[0] for i in (np.argwhere(data < threshold)).tolist()]
+
+    indx = []
     f = open(exclude_list, 'r')
     line = f.readline()
     if line:
@@ -300,10 +546,10 @@ def setFramesIN(in_file, threshold, exclude_list):
         indx = map(int, line.split(","))
     f.close()
     print indx
-    
+
     if indx:
-        indices= list(set(indices) - set(indx))
-    
+        indices = list(set(indices) - set(indx))
+
     f = open(out_file, 'a')
 
     for idx in indices:
@@ -321,15 +567,15 @@ def setFramesInList(in_file):
     from numpy import loadtxt
 
     out_file = os.path.join(os.getcwd(), 'frames_in_list.1D')
-    
-    indices=[]
+
+    indices = []
     f = open(in_file, 'r')
     line = f.readline()
     if line:
         line = line.strip(',')
         indices = map(int, line.split(","))
     f.close()
-    
+
     f = open(out_file, 'a')
 
     for idx in indices:
@@ -353,15 +599,15 @@ def setMeanDVARS(infile_a, infile_b):
     print "outval ---> ", out_val
     print "error_val -->", error_val
 
-    data= loadtxt(infile_b)
-    mean  = np.mean(data)
-    
+    data = loadtxt(infile_b)
+    mean = np.mean(data)
+
     f = open(out_file, 'a')
 
     f.write('%.4f,' % mean)
 
     f.close()
-    
+
     return out_file
 
 
@@ -373,8 +619,8 @@ def setNUM5(infile_a, infile_b):
     from numpy import loadtxt
 
     ###NUMBER OF relative FRAMES >5%
-    frame_percentage= 5
-    
+    frame_percentage = 5
+
     out_file = os.path.join(os.getcwd(), 'pow_params.txt')
     copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
     out_val, error_val = copycmd.communicate()
@@ -382,10 +628,10 @@ def setNUM5(infile_a, infile_b):
     print "error_val -->", error_val
 
     data = loadtxt(infile_b)
-    count = np.float(data[data>=frame_percentage].size)
+    count = np.float(data[data >= frame_percentage].size)
 
     f = open(out_file, 'a')
-    
+
     f.write('%.4f,' % count)
 
     f.close()
@@ -399,18 +645,18 @@ def setNUM10(infile_a, infile_b):
     import os
     import numpy as np
     from numpy import loadtxt
-    
+
     ###NUMBER OF relative FRAMES >10%
-    frame_percentage= 10
+    frame_percentage = 10
 
     out_file = os.path.join(os.getcwd(), 'pow_params.txt')
     copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
     out_val, error_val = copycmd.communicate()
     print "outval ---> ", out_val
     print "error_val -->", error_val
-    
+
     data = loadtxt(infile_b)
-    count = np.float(data[data>=frame_percentage].size)
+    count = np.float(data[data >= frame_percentage].size)
 
     f = open(out_file, 'a')
     f.write('%.4f,' % count)
@@ -500,8 +746,8 @@ def setNUMFD(in_file, threshold):
 
     out_file = os.path.join(os.getcwd(), 'numFD')
 
-    data= loadtxt(in_file)
-    count = np.float(data[data >=threshold].size)
+    data = loadtxt(in_file)
+    count = np.float(data[data >= threshold].size)
     print "count ->", count
 
     f = open(out_file, 'a')
@@ -514,17 +760,21 @@ def setNUMFD(in_file, threshold):
 
 def setScrubbedMotion(infile_a, infile_b):
 
-    import subprocess as sb
     import os
 
     out_file = os.path.join(os.getcwd(), 'rest_mc_scrubbed.1D')
 
-    cmd = sb.Popen(['awk', 'FNR==NR{a[$1];next}(FNR in a){print}',
-                   infile_a, infile_b], stdin=sb.PIPE, stdout=sb.PIPE,)
+    f1 = open(infile_a)
+    f2 = open(infile_b)
+    l1 = f1.readlines()
+    l2 = f2.readlines()
+    f1.close()
+    f2.close()
 
-    stdout_value, stderr_value = cmd.communicate()
     f = open(out_file, 'a')
-    f.write(stdout_value)
+    for l in l1:
+        data = l2[int(l.strip())]
+        f.write(data)
     f.close()
     return out_file
 
@@ -885,7 +1135,7 @@ def create_anat_func_dataflow(sublist,
                               at,
                               rt,
                               at_list,
-                              rt_list):    
+                              rt_list):
     """
         Example parameters
         anat_name = 'mprage'
