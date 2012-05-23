@@ -23,12 +23,16 @@ def rename_connections(workflow, datasink, rename_list, sink_node):
         ncount += 1
 
 
-def anat_sink(workflow, datasink, mprage_mni):
+def anat_sink(workflow, datasink, anatpreproc, mprage_mni):
 
-    rename_list = [(mprage_mni, 'outputspec.brain_mni',
+    rename_list = [(anatpreproc, 'outputspec.brain',
                     'anat_rename', 'mprage_brian.nii.gz'),
+                   (anatpreproc, 'outputspec.reorient',
+                    'anat_rename', 'mprage_RPI.nii.gz'), 
+                   (mprage_mni, 'outputspec.brain_mni',
+                    'anat_rename', 'mprage_brian_MNI.nii.gz'),
                    (mprage_mni, 'outputspec.reorient_mni',
-                    'anat_rename', 'mprage_RPI.nii.gz')]
+                    'anat_rename', 'mprage_RPI_MNI.nii.gz')]
     rename_connections(workflow, datasink, rename_list, 'anat')
 
 
@@ -44,8 +48,12 @@ def func_sink(workflow, datasink, funcpreproc, func_in_mni):
                     'func_rename', 'rest_maxdisp.1D'),
                    (funcpreproc, 'outputspec.preprocessed',
                     'func_rename', 'rest_pp.nii.gz'),
+                   (funcpreproc, 'outputspec.preprocessed_mask',
+                    'func_rename', 'rest_pp_mask.nii.gz'),
+                   (funcpreproc, 'outputspec.example_func',
+                    'func_rename', 'example_func.nii.gz'),
                    (func_in_mni, 'outputspec.preprocessed_mask_mni',
-                    'func_rename', 'rest_pp_mask.nii.gz')]
+                    'func_rename', 'rest_pp_mask_MNI.nii.gz')]
     rename_connections(workflow, datasink, rename_list, 'func')
 
 
@@ -109,9 +117,11 @@ def seg_sink(workflow, datasink, segpreproc, mprage_mni):
     rename_connections(workflow, datasink, rename_list, 'segment')
 
 
-def nuisance_sink(workflow, datasink, nuisancepreproc):
+def nuisance_sink(workflow, datasink, nuisancepreproc, func_in_mni):
     rename_list = [(nuisancepreproc, 'outputspec.residual_file',
                     'rename', 'rest_residual.nii.gz'),
+                   (func_in_mni, 'outputspec.residual_file_mni',
+                    'rename', 'rest_residual_MNI.nii.gz'),
                    (nuisancepreproc, 'outputspec.median_angle_corrected_file')]
     rename_connections(workflow, datasink, rename_list, 'nuisance')
 
@@ -144,11 +154,12 @@ def scrubbing_sink(workflow, datasink, scpreproc):
 
 
 def sca_sink(workflow, datasink, scapreproc):
-    rename_list = [
+    rename_list = [(scapreproc, 'outputspec.seed_mni2func',
+                    'sca_rename', 'seed_native.nii.gz'),
                    (scapreproc, 'outputspec.correlations',
-                    'sca_rename', 'correlations.nii.gz'),
+                    'sca_rename', 'correlations_native.nii.gz'),
                    (scapreproc, 'outputspec.Z_trans_correlations',
-                    'sca_rename', 'Z.nii.gz'),
+                    'sca_rename', 'Z_native.nii.gz'),
                    (scapreproc, 'outputspec.Z_2standard',
                     'sca_rename', 'Z_2standard.nii.gz'),
                    (scapreproc, 'outputspec.Z_2standard_FWHM',
