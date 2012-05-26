@@ -10,7 +10,7 @@ from base import (create_anat_preproc, create_func_preproc,
                     create_vmhc_preproc, create_scrubbing_preproc,
                     mprage_in_mnioutputs, func_in_mnioutputs,
                     create_filter, create_timeseries_preproc,
-                    create_group_analysis)
+                    create_group_analysis, create_parameters_preproc)
 
 from utils import (create_anat_func_dataflow, create_seed_dataflow,
                     create_alff_dataflow, create_sca_dataflow,
@@ -28,6 +28,7 @@ from sink import (anat_sink,
                   func_sink,
                   nuisance_sink,
                   scrubbing_sink,
+                  parameters_sink,
                   sca_sink,
                   alff_sink,
                   vmhc_sink,
@@ -263,6 +264,11 @@ def get_workflow(wf_name, c):
     if wf_name.lower() == 'sc':
 
         preproc = create_scrubbing_preproc()
+        return preproc
+    
+    if wf_name.lower() == 'pm':
+
+        preproc = create_parameters_preproc()
         preproc.inputs.threshold_input.threshold = c.scrubbingThreshold
         preproc.get_node('threshold_input').iterables = ('threshold', c.scrubbingThreshold)
         return preproc
@@ -409,6 +415,7 @@ def prep_workflow(c):
     regpreproc = get_workflow('reg', c)
     segpreproc = get_workflow('seg', c)
     scpreproc = get_workflow('sc', c)
+    pmpreproc = get_workflow('pm', c)
     select = get_workflow('select', c)
     nuisancepreproc = get_workflow('nuisance', c)
     mprage_mni = get_workflow('mprage_in_mnioutputs', c)
@@ -459,12 +466,22 @@ def prep_workflow(c):
                      segpreproc, 'inputspec.highres2example_func_mat')
     workflow.connect(regpreproc, 'outputspec.stand2highres_warp',
                      segpreproc, 'inputspec.stand2highres_warp')
+    
     workflow.connect(flowAnatFunc, 'datasource.rest',
-                     scpreproc, 'inputspec.rest')
+                     pmpreproc, 'inputspec.rest')
+    workflow.connect(funcpreproc, 'outputspec.movement_parameters',
+                     pmpreproc, 'inputspec.movement_parameters')
+    workflow.connect(funcpreproc, 'outputspec.max_displacement',
+                     pmpreproc, 'inputspec.max_displacement')
+    
+    
+    workflow.connect(pmpreproc, 'outputspec.frames_in_1D',
+                     scpreproc, 'inputspec.frames_in_1D')
     workflow.connect(funcpreproc, 'outputspec.preprocessed',
                      scpreproc, 'inputspec.preprocessed')
     workflow.connect(funcpreproc, 'outputspec.movement_parameters',
                      scpreproc, 'inputspec.movement_parameters')
+    
     workflow.connect(funcpreproc, 'outputspec.preprocessed',
                      select, 'inputspec.preprocessed')
     workflow.connect(scpreproc, 'outputspec.scrubbed_preprocessed',
@@ -542,6 +559,9 @@ def prep_workflow(c):
              datasink,
              segpreproc,
              mprage_mni)
+    parameters_sink(workflow,
+                    datasink,
+                    pmpreproc)
     scrubbing_sink(workflow,
                    datasink,
                    scpreproc)

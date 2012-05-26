@@ -128,29 +128,36 @@ def nuisance_sink(workflow, datasink, nuisancepreproc, func_in_mni):
 
 def scrubbing_sink(workflow, datasink, scpreproc):
 
-    rename_list = [(scpreproc, 'outputspec.mean_deriv_sq_1D',
-                    'sc_rename', 'mean_deriv_sq.1D'),
-                   (scpreproc, 'outputspec.mean_raw_sq_1D',
-                    'sc_rename', 'mean_raw_sq.1D'),
+    rename_list = [
                    (scpreproc, 'outputspec.scrubbed_preprocessed',
                     'sc_rename', 'rest_pp_scrubbed.nii.gz'),
-                   (scpreproc, 'outputspec.temp_deriv_brik_file'),
-                   (scpreproc, 'outputspec.temp_deriv_head_file'),
-                   (scpreproc, 'outputspec.temp_deriv_sq_brik_file'),
-                   (scpreproc, 'outputspec.temp_deriv_sq_head_file'),
-                   (scpreproc, 'outputspec.raw_sq_brik_file'),
-                   (scpreproc, 'outputspec.raw_sq_head_file'),
-                   (scpreproc, 'outputspec.mask_brik_file'),
-                   (scpreproc, 'outputspec.mask_head_file'),
-                   (scpreproc, 'outputspec.FD_1D'),
-                   (scpreproc, 'outputspec.sqrt_mean_deriv_sq_1D'),
-                   (scpreproc, 'outputspec.sqrt_mean_raw_sq_1D'),
-                   (scpreproc, 'outputspec.frames_ex_1D'),
-                   (scpreproc, 'outputspec.frames_in_1D'),
-                   (scpreproc, 'outputspec.pow_params'),
-                   (scpreproc, 'outputspec.ftof_percent_change_1D'),
                    (scpreproc, 'outputspec.scrubbed_movement_parameters')]
     rename_connections(workflow, datasink, rename_list, 'scrubbing')
+    
+
+def parameters_sink(workflow, datasink, pmpreproc):
+
+    rename_list = [(pmpreproc, 'outputspec.temp_deriv_brik_file'),
+                   (pmpreproc, 'outputspec.temp_deriv_head_file'),
+                   (pmpreproc, 'outputspec.temp_deriv_sq_brik_file'),
+                   (pmpreproc, 'outputspec.temp_deriv_sq_head_file'),
+                   (pmpreproc, 'outputspec.raw_sq_brik_file'),
+                   (pmpreproc, 'outputspec.raw_sq_head_file'),
+                   (pmpreproc, 'outputspec.mask_brik_file'),
+                   (pmpreproc, 'outputspec.mask_head_file'),
+                   (pmpreproc, 'outputspec.FD_1D'),
+                   (pmpreproc, 'outputspec.sqrt_mean_deriv_sq_1D'),
+                   (pmpreproc, 'outputspec.sqrt_mean_raw_sq_1D'),
+                   (pmpreproc, 'outputspec.frames_ex_1D'),
+                   (pmpreproc, 'outputspec.frames_in_1D'),
+                   (pmpreproc, 'outputspec.ftof_percent_change_1D'),
+                   (pmpreproc, 'outputspec.mean_deriv_sq_1D',
+                    'pm_rename', 'mean_deriv_sq.1D'),
+                   (pmpreproc, 'outputspec.mean_raw_sq_1D',
+                    'pm_rename', 'mean_raw_sq.1D'),
+                   (pmpreproc, 'outputspec.power_params'),
+                   (pmpreproc, 'outputspec.motion_params')]
+    rename_connections(workflow, datasink, rename_list, 'parameters')
 
 
 def sca_sink(workflow, datasink, scapreproc):

@@ -3,6 +3,151 @@ import e_afni
 import nipype.pipeline.engine as pe
 import nipype.interfaces.utility as util
 
+
+def generateMotionParameters(rest, movement_parameters, max_displacement):
+
+
+    import os
+    import numpy as np
+    import re
+    
+    out_file = os.path.join(os.getcwd(), 'motion_parameters.txt')
+    
+    f= open(out_file,'w')
+    print >>f, "Subject,Rest Scan,Mean Relative RMS Displacement,"\
+    "Max Relative RSM Displacement,Movements >0.1mm,Mean " \
+    "Relative Mean Rotation,Mean Relative Maxdisp,Max Relative Maxdisp," \
+    "Max Abs Maxdisp,Max Relative Roll,Max Relative Pitch," \
+    "Max Relative Yaw,Max Relative dS-I,Max Relative dL-R," \
+    "Max Relative dP-A,Mean Relative Roll,Mean Relative Pitch,Mean Relative Yaw," \
+    "Mean Relative dS-I,Mean Relative dL-R,Mean Relative dP-A,Max Abs Roll," \
+    "Max Abs Pitch,Max Abs Yaw,Max Abs dS-I,Max Abs dL-R,Max Abs dP-A"
+     
+    
+    dir_name = os.path.dirname(rest)
+    rest_name = os.path.basename(dir_name)
+    subject_id = os.path.basename(
+                    os.path.dirname(dir_name))
+    f.write("%s," %(subject_id))
+    f.write("%s," %(rest_name))
+    
+    arr = np.genfromtxt(movement_parameters)
+    arr = arr.T
+    
+    ##Relative RMS of translation
+    rms= np.sqrt(arr[3]*arr[3] + arr[4]*arr[4] + arr[5]*arr[5])
+    diff = np.diff(rms)
+    MEANrms = np.mean(abs(diff))
+    f.write("%.3f," %(MEANrms))
+    
+    MAXrms= np.max(abs(diff))
+    f.write("%.3f," %(MAXrms))
+    
+    ##NUMBER OF relative RMS movements >0.1mm
+    NUMmove= np.sum(abs(diff)>0.1)
+    f.write("%.3f," %(NUMmove))
+    
+    ##Mean of mean relative rotation (params 1-3)
+    MEANrot= np.mean(np.abs(np.diff( (abs(arr[0])+ abs(arr[1])+ abs(arr[2]))/3 ) ) )
+    f.write("%.3f," %(MEANrot))
+    
+    file= open(max_displacement, 'r')
+    lines =file.readlines()
+    file.close()
+    list1=[]
+    
+    for l in lines:
+        if re.match("^\d+?\.\d+?$", l.strip()):
+            list1.append(float(l.strip()))
+    
+    arr2=np.array(list1, dtype='float')
+    
+    mean=np.mean(np.diff(arr2))
+    f.write("%.3f," %(mean))
+    
+    
+    relMAX=np.max(abs(np.diff(arr2)))
+    f.write("%.3f," %(relMAX))
+    
+    MAX= np.max(arr2)
+    f.write("%.3f," %(MAX))
+    
+    
+    for i in range(6):
+        f.write("%.6f," %(np.max(abs(np.diff(arr[i])))))
+    
+    for i in range(6):
+        f.write("%.6f," %(np.mean(np.diff(arr[i]))))
+        
+    for i in range(6):
+        f.write("%.6f," %(np.max(abs(arr[i]))))
+        
+    f.close()
+    return out_file
+    
+    
+
+def generatePowerParams(rest, FD_1D, threshold, ftof_percent, sqrt_mean_raw):
+    
+    import os
+    import numpy as np
+    from numpy import loadtxt
+
+    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
+    
+    f= open(out_file,'w')
+    print >>f, "Subject,Rest Scan, MeanFD, rootMeanSquareFD, NumFD >=threshold," \
+    "rmsFD, FDquartile(top 1/4th FD), PercentFD( >threshold), Num5, Num10, MeanDVARS, MeanDVARS_POW"
+    
+
+    dir_name = os.path.dirname(rest)
+    rest_name = os.path.basename(dir_name)
+    subject_id = os.path.basename(
+                    os.path.dirname(dir_name))
+
+
+    f.write("%s," % subject_id)
+    f.write("%s," % rest_name)
+
+    data= loadtxt(FD_1D)
+    meanFD  = np.mean(data)
+    f.write('%.4f,' % meanFD)
+    
+    numFD = float(data[data >=threshold].size)
+    f.write('%.4f,' % numFD)
+    
+    rmsFD = np.sqrt(np.mean(data))
+    f.write('%.4f,' % rmsFD)
+    
+    #Mean of the top quartile of FD is $FDquartile
+    quat=int(len(data)/4)
+    FDquartile=np.mean(np.sort(data)[::-1][:quat])
+    f.write('%.4f,' % rmsFD)
+    
+    ##NUMBER OF FRAMES >threshold FD as percentage of total num frames
+    count = np.float(data[data>threshold].size)
+    percentFD = (count*100/(len(data)+1))
+    f.write('%.4f,' %percentFD)
+    
+    
+    data=loadtxt(ftof_percent)
+    ###NUMBER OF relative FRAMES >5%
+    num5= np.sum(data>=5)*100/len(data)
+    f.write('%.4f,' % num5)
+    
+    num10= np.sum(data>=10)*100/len(data)
+    f.write('%.4f,' % num10)
+    
+    meanDVARS  = np.mean(data)
+    f.write('%.4f,' % meanDVARS)
+    
+    data = loadtxt(sqrt_mean_raw)
+    meanDVARS_POW = np.mean(data)
+    f.write('%.4f,' % meanDVARS_POW)
+    
+    return out_file
+        
+
 def reho_statistic_filter(lfo, tied):
 
     import nibabel as nb
@@ -102,30 +247,6 @@ def TRendminus1(vols):
     return v
 
 
-def scCopy(in_file):
-
-    import os
-
-    cwd = os.getcwd()
-
-    out_file = 'pow_params.txt'
-    path = os.path.join(cwd, out_file)
-    out_file = path
-
-    dir_name = os.path.dirname(in_file)
-    rest_name = os.path.basename(dir_name)
-    subject_id = os.path.basename(
-                    os.path.dirname(dir_name))
-
-    f = open(out_file, 'a')
-
-    f.write("%s," % subject_id)
-    f.write("%s," % rest_name)
-
-    f.close()
-
-    return out_file
-
 
 def createSC(in_file):
     import subprocess as sb
@@ -158,81 +279,6 @@ def createSC(in_file):
     for out in output:
         print >>f, float(out)
     f.close()
-    return out_file
-
-
-def setMeanFD(infile_a, infile_b):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-
-    data= loadtxt(infile_b)
-    mean  = np.mean(data)
-    print "mean ->", mean
-
-    f = open(out_file, 'a')
-    f.write('%.4f,' % mean)
-
-    f.close()
-
-    return out_file
-
-
-def setNumFD(infile_a, infile_b, threshold):
-
-    import subprocess as sb
-    import os
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-    
-    data= loadtxt(infile_b)
-    count = float(data[data >=threshold].size)
-    print "count ->", count
-
-    f = open(out_file, 'a')
-    f.write('%.4f,' % count)
-
-    f.close()
-    
-    return out_file
-
-
-def setPercentFD(infile_a, infile_b, threshold):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-    
-    data= loadtxt(infile_b)
-    count = np.float(data[data>threshold].size)
-    sum = (count*100/(len(data)+1))
-    print "sum ->", sum
-    
-    f = open(out_file, 'a')
-    f.write('%.4f,' %sum)
-
-    f.close()
-
     return out_file
 
 
@@ -276,6 +322,7 @@ def setFramesEx(in_file,threshold):
 
     return out_file
 
+
 def setFramesIN(in_file, threshold, exclude_list):
 
     import subprocess as sb
@@ -308,112 +355,6 @@ def setFramesIN(in_file, threshold, exclude_list):
 
     for idx in indices:
         f.write('%s,' % int(idx))
-
-    f.close()
-
-    return out_file
-
-def setFramesInList(in_file):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'frames_in_list.1D')
-    
-    indices=[]
-    f = open(in_file, 'r')
-    line = f.readline()
-    if line:
-        line = line.strip(',')
-        indices = map(int, line.split(","))
-    f.close()
-    
-    f = open(out_file, 'a')
-
-    for idx in indices:
-        print >>f, int(idx)
-
-    f.close()
-
-    return out_file
-
-
-def setMeanDVARS(infile_a, infile_b):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-
-    data= loadtxt(infile_b)
-    mean  = np.mean(data)
-    
-    f = open(out_file, 'a')
-
-    f.write('%.4f,' % mean)
-
-    f.close()
-    
-    return out_file
-
-
-def setNUM5(infile_a, infile_b):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    ###NUMBER OF relative FRAMES >5%
-    frame_percentage= 5
-    
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-
-    data = loadtxt(infile_b)
-    count = np.float(data[data>=frame_percentage].size)
-
-    f = open(out_file, 'a')
-    
-    f.write('%.4f,' % count)
-
-    f.close()
-
-    return out_file
-
-
-def setNUM10(infile_a, infile_b):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-    
-    ###NUMBER OF relative FRAMES >10%
-    frame_percentage= 10
-
-    out_file = os.path.join(os.getcwd(), 'pow_params.txt')
-    copycmd = sb.Popen(['cp', infile_a, out_file], stdin=sb.PIPE, stdout=sb.PIPE )
-    out_val, error_val = copycmd.communicate()
-    print "outval ---> ", out_val
-    print "error_val -->", error_val
-    
-    data = loadtxt(infile_b)
-    count = np.float(data[data>=frame_percentage].size)
-
-    f = open(out_file, 'a')
-    f.write('%.4f,' % count)
 
     f.close()
 
@@ -491,27 +432,6 @@ def setFtoFPercentChange(infile_a, infile_b):
     return out_file
 
 
-def setNUMFD(in_file, threshold):
-
-    import subprocess as sb
-    import os
-    import numpy as np
-    from numpy import loadtxt
-
-    out_file = os.path.join(os.getcwd(), 'numFD')
-
-    data= loadtxt(in_file)
-    count = np.float(data[data >=threshold].size)
-    print "count ->", count
-
-    f = open(out_file, 'a')
-    f.write('%.4f,' % count)
-
-    f.close()
-
-    return out_file
-
-
 def setScrubbedMotion(infile_a, infile_b):
 
     import os
@@ -520,10 +440,13 @@ def setScrubbedMotion(infile_a, infile_b):
 
     f1= open(infile_a)
     f2=open(infile_b)
-    l1=f1.readlines()
+    l1=f1.readline()
     l2=f2.readlines()
     f1.close()
     f2.close()
+    
+    
+    l1=l1.rstrip(',').split(',')
     
     f = open(out_file, 'a')
     for l in l1:
