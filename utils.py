@@ -4,7 +4,7 @@ import nipype.pipeline.engine as pe
 import nipype.interfaces.utility as util
 
 
-def generateMotionParameters(rest, movement_parameters, max_displacement):
+def generateMotionParameters(subject_id, session_id, rest, movement_parameters, max_displacement):
 
 
     import os
@@ -14,7 +14,7 @@ def generateMotionParameters(rest, movement_parameters, max_displacement):
     out_file = os.path.join(os.getcwd(), 'motion_parameters.txt')
     
     f= open(out_file,'w')
-    print >>f, "Subject,Rest Scan,Mean Relative RMS Displacement,"\
+    print >>f, "Subject,Session,Rest Scan,Mean Relative RMS Displacement,"\
     "Max Relative RSM Displacement,Movements >0.1mm,Mean " \
     "Relative Mean Rotation,Mean Relative Maxdisp,Max Relative Maxdisp," \
     "Max Abs Maxdisp,Max Relative Roll,Max Relative Pitch," \
@@ -26,9 +26,10 @@ def generateMotionParameters(rest, movement_parameters, max_displacement):
     
     dir_name = os.path.dirname(rest)
     rest_name = os.path.basename(dir_name)
-    subject_id = os.path.basename(
-                    os.path.dirname(dir_name))
+#    subject_id = os.path.basename(
+#                    os.path.dirname(dir_name))
     f.write("%s," %(subject_id))
+    f.write("%s," %(session_id))
     f.write("%s," %(rest_name))
     
     arr = np.genfromtxt(movement_parameters)
@@ -96,8 +97,8 @@ def generatePowerParams(rest, FD_1D, threshold, ftof_percent, sqrt_mean_raw):
     out_file = os.path.join(os.getcwd(), 'pow_params.txt')
     
     f= open(out_file,'w')
-    print >>f, "Subject,Rest Scan, MeanFD, rootMeanSquareFD, NumFD >=threshold," \
-    "rmsFD, FDquartile(top 1/4th FD), PercentFD( >threshold), Num5, Num10, MeanDVARS, MeanDVARS_POW"
+    print >>f, "Subject,Rest Scan, MeanFD, NumFD (Frames>=threshold), rootMeanSquareFD, FDquartile(top 1/4th FD)," \
+    "PercentFD(%Frames%>threshold), Num5, Num10, MeanDVARS, MeanDVARS_POW"
     
 
     dir_name = os.path.dirname(rest)
@@ -113,7 +114,7 @@ def generatePowerParams(rest, FD_1D, threshold, ftof_percent, sqrt_mean_raw):
     meanFD  = np.mean(data)
     f.write('%.4f,' % meanFD)
     
-    numFD = float(data[data >=threshold].size)
+    numFD= np.sum(data>=threshold)
     f.write('%.4f,' % numFD)
     
     rmsFD = np.sqrt(np.mean(data))
@@ -125,7 +126,7 @@ def generatePowerParams(rest, FD_1D, threshold, ftof_percent, sqrt_mean_raw):
     f.write('%.4f,' % rmsFD)
     
     ##NUMBER OF FRAMES >threshold FD as percentage of total num frames
-    count = np.float(data[data>threshold].size)
+    count = np.sum(data >=threshold)
     percentFD = (count*100/(len(data)+1))
     f.write('%.4f,' %percentFD)
     

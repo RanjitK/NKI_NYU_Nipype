@@ -832,9 +832,11 @@ def create_parameters_preproc():
 
 
     sc = pe.Workflow(name='param_preproc')
-    inputNode = pe.Node(util.IdentityInterface(fields=['rest',
-                                                    'movement_parameters',
-                                                    'max_displacement'
+    inputNode = pe.Node(util.IdentityInterface(fields=['subject_id',
+                                                       'session_id',
+                                                       'rest',
+                                                       'movement_parameters',
+                                                       'max_displacement'
                                                     ]),
                         name='inputspec')
     
@@ -943,7 +945,7 @@ def create_parameters_preproc():
     sc_3dROIstats_2.inputs.quiet = True
     
     
-    sc_MotionParameters = pe.MapNode(util.Function(input_names=["rest", "movement_parameters", 
+    sc_MotionParameters = pe.MapNode(util.Function(input_names=["subject_id","session_id", "rest", "movement_parameters", 
                                                                 "max_displacement"],
                                                    output_names=['out_file'],
                                                    function=generateMotionParameters),
@@ -1003,6 +1005,10 @@ def create_parameters_preproc():
     sc.connect(inputnode_threshold, 'threshold', sc_FramesIN, 'threshold')
     sc.connect(sc_FramesEx, 'out_file', sc_FramesIN, 'exclude_list')
     
+    sc.connect(inputNode, 'subject_id', 
+               sc_MotionParameters, 'subject_id')
+    sc.connect(inputNode, 'session_id', 
+               sc_MotionParameters, 'session_id')
     sc.connect(inputNode, 'rest', 
                sc_MotionParameters, 'rest')
     sc.connect(inputNode, 'movement_parameters', 

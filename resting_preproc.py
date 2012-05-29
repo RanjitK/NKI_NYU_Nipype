@@ -467,6 +467,10 @@ def prep_workflow(c):
     workflow.connect(regpreproc, 'outputspec.stand2highres_warp',
                      segpreproc, 'inputspec.stand2highres_warp')
     
+    workflow.connect(flowAnatFunc, 'inputnode.subject_id',
+                     pmpreproc, 'inputspec.subject_id')
+    workflow.connect(flowAnatFunc, 'inputnode.session_id',
+                     pmpreproc, 'inputspec.session_id')
     workflow.connect(flowAnatFunc, 'datasource.rest',
                      pmpreproc, 'inputspec.rest')
     workflow.connect(funcpreproc, 'outputspec.movement_parameters',
