@@ -1039,7 +1039,7 @@ def create_vmhc_dataflow(name,
     return datasource, da, datasource_warp
 
 
-def create_gp_dataflow(base_dir, modelist, dervlist, labelist, template_dict, template_args, name):
+def create_gp_dataflow(base_dir, sublist, modelist, dervlist, labelist, template_dict, template_args, name):
 
     import nipype.pipeline.engine as pe
     import nipype.interfaces.io as nio
@@ -1056,7 +1056,7 @@ def create_gp_dataflow(base_dir, modelist, dervlist, labelist, template_dict, te
                            ('derivative', dervlist),
                            ('label', labelist)]
 
-    datasource = pe.Node(interface=nio.DataGrabber(infields=['model_name', 'derivative'],
+    datasource = pe.Node(interface=nio.DataGrabber(infields=['model_name', 'derivative','label'],
                                                    outfields=['mat', 'con', 'fts', 'grp', 'derv']),
                          name=name)
     datasource.inputs.base_directory = base_dir
@@ -1068,6 +1068,7 @@ def create_gp_dataflow(base_dir, modelist, dervlist, labelist, template_dict, te
     wf.connect(inputnode, 'model', datasource, 'model_name')
     wf.connect(inputnode, 'derivative', datasource, 'derivative')
     wf.connect(inputnode, 'label', datasource, 'label')
+    
     return wf
 
 
